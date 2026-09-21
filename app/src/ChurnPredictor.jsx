@@ -38,8 +38,6 @@ function defaultCustomer() {
   };
 }
 
-// ---- Turn a friendly customer object into the one-hot vector the model
-// was trained on.
 function toFeatureValues(c) {
   return {
     tenure: c.tenure,
@@ -68,14 +66,13 @@ function predict(customer) {
     const scaled = (values[name] - MODEL.mean[i]) / MODEL.scale[i];
     z += MODEL.coef[i] * scaled;
   });
-  const pChurn = sigmoid(z);
-  return { pChurn, values };
+  return { pChurn: sigmoid(z) };
 }
 
 function riskBand(pChurn) {
-  if (pChurn < 0.3) return { label: "Low", color: "#3F6357" };
-  if (pChurn < 0.6) return { label: "Elevated", color: "#B07A2E" };
-  return { label: "High", color: "#A8412F" };
+  if (pChurn < 0.3) return { label: "Low", color: "#059669" };
+  if (pChurn < 0.6) return { label: "Elevated", color: "#D97706" };
+  return { label: "High", color: "#DC2626" };
 }
 
 const FRIENDLY = {
@@ -116,28 +113,73 @@ function buildExplanation(customer, pChurn, band) {
     body = `This ${(pChurn * 100).toFixed(1)}% score sits in an elevated-but-uncertain range.${churnDrivers.length ? ` ${churnDrivers.join(" and ")} push it toward churn,` : ""}${retentionFactors.length ? ` while ${retentionFactors.join(" and ")} pull it back toward retention.` : ""}`;
   }
 
-  return `${body} This explanation is generated directly from the trained model's own coefficients \u2014 one advantage of an interpretable model like logistic regression over a black box. The model is tuned to favor recall over precision: it would rather flag a customer who ends up staying than miss one who's about to leave, since a missed churner is far costlier than one unnecessary retention offer. Reminder: this is a portfolio demo on a public research dataset, not a production system.`;
+  return `${body} Generated directly from the trained model's own coefficients \u2014 one advantage of an interpretable model like logistic regression over a black box. The model favors recall over precision: it would rather flag a customer who ends up staying than miss one who's about to leave, since a missed churner is far costlier than one unnecessary retention offer. Portfolio demo on a public research dataset, not a production system.`;
 }
 
-const INK = "#16232B";
-const INK_SOFT = "#4B5A61";
-const BG = "#F2F1EC";
-const PANEL = "#FFFFFF";
-const LINE = "#DDDAD1";
-const ACCENT = "#3F6357";
+// ---- Dashboard shell palette: dark control rail + light workspace ----
+const RAIL = "#111827";
+const RAIL_LINE = "#1F2937";
+const RAIL_TEXT = "#E5E7EB";
+const RAIL_MUTED = "#9CA3AF";
+const RAIL_ACCENT = "#38BDF8";
 
-function Field({ label, children, help }) {
+const CANVAS = "#F3F4F6";
+const INK = "#111827";
+const INK_SOFT = "#6B7280";
+const BORDER = "#E5E7EB";
+const PANEL = "#FFFFFF";
+
+const FONT = "ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif";
+const MONO = "ui-monospace, 'SF Mono', Menlo, monospace";
+
+function RailField({ label, children, help }) {
   return (
-    <div>
-      <label className="text-sm block mb-1" style={{ fontFamily: "ui-sans-serif, system-ui", color: INK }}>
+    <div className="mb-5">
+      <label className="text-[11px] uppercase tracking-wide block mb-2 font-medium" style={{ color: RAIL_MUTED, fontFamily: FONT }}>
         {label}
       </label>
       {children}
       {help && (
-        <p style={{ color: INK_SOFT, fontFamily: "ui-sans-serif, system-ui" }} className="text-xs mt-1">
+        <p style={{ color: RAIL_MUTED, fontFamily: FONT }} className="text-[11px] mt-1.5">
           {help}
         </p>
       )}
+    </div>
+  );
+}
+
+function Gauge({ pChurn, color }) {
+  const size = 200;
+  const stroke = 14;
+  const r = (size - stroke) / 2;
+  const c = 2 * Math.PI * r;
+  const pct = Math.min(Math.max(pChurn, 0), 1);
+  const offset = c * (1 - pct);
+  return (
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={BORDER} strokeWidth={stroke} />
+      <circle
+        cx={size / 2} cy={size / 2} r={r} fill="none" stroke={color} strokeWidth={stroke}
+        strokeDasharray={c} strokeDashoffset={offset} strokeLinecap="round"
+        transform={`rotate(-90 ${size / 2} ${size / 2})`}
+        style={{ transition: "stroke-dashoffset 0.3s ease" }}
+      />
+      <text x="50%" y="46%" textAnchor="middle" style={{ fontFamily: MONO, fontSize: "34px", fontWeight: 700, fill: INK }}>
+        {(pChurn * 100).toFixed(0)}%
+      </text>
+      <text x="50%" y="62%" textAnchor="middle" style={{ fontFamily: FONT, fontSize: "11px", fill: INK_SOFT, letterSpacing: "0.05em" }}>
+        CHURN RISK
+      </text>
+    </svg>
+  );
+}
+
+function KpiTile({ label, value, sub }) {
+  return (
+    <div style={{ background: PANEL, border: `1px solid ${BORDER}`, borderRadius: 10 }} className="p-4">
+      <p style={{ color: INK_SOFT, fontFamily: FONT }} className="text-xs mb-1">{label}</p>
+      <p style={{ color: INK, fontFamily: MONO }} className="text-2xl font-semibold">{value}</p>
+      {sub && <p style={{ color: INK_SOFT, fontFamily: FONT }} className="text-[11px] mt-0.5">{sub}</p>}
     </div>
   );
 }
@@ -160,149 +202,143 @@ export default function ChurnPredictor() {
 
   const selectStyle = {
     width: "100%",
-    border: `1px solid ${LINE}`,
-    padding: "6px 8px",
-    fontFamily: "ui-sans-serif, system-ui",
-    fontSize: "0.875rem",
-    background: "#fff",
-    color: INK,
+    background: "#1F2937",
+    border: `1px solid ${RAIL_LINE}`,
+    borderRadius: 6,
+    padding: "8px 10px",
+    fontFamily: FONT,
+    fontSize: "0.8125rem",
+    color: RAIL_TEXT,
   };
 
   return (
-    <div style={{ background: BG, minHeight: "100%", color: INK, fontFamily: "'Iowan Old Style', 'Palatino Linotype', Georgia, serif" }} className="w-full p-4 md:p-8">
-      <div className="max-w-4xl mx-auto">
-        <header className="mb-6">
-          <p style={{ color: INK_SOFT, fontFamily: "ui-monospace, monospace", letterSpacing: "0.02em" }} className="text-xs mb-2">
-            AI/ML PORTFOLIO PROJECT — CUSTOMER RETENTION
-          </p>
-          <h1 className="text-3xl md:text-4xl mb-2" style={{ fontWeight: 600 }}>
-            Customer churn predictor
-          </h1>
-          <p style={{ color: INK_SOFT, fontFamily: "ui-sans-serif, system-ui" }} className="text-sm max-w-xl leading-relaxed">
-            A logistic regression model trained on the IBM/Kaggle Telco Customer Churn dataset.
-            Adjust a customer's profile to see the model respond in real time, then ask it to
-            explain its own reasoning.
-          </p>
-        </header>
-
-        <div style={{ background: "#EFE6DC", borderLeft: `3px solid ${band.color}` }} className="text-sm px-4 py-3 mb-6">
-          <span style={{ fontFamily: "ui-sans-serif, system-ui" }}>
-            Portfolio demo on a public research dataset. The same interpretable-model pattern
-            works for any subscription business — SaaS, telecom, fintech, streaming.
-          </span>
+    <div style={{ background: CANVAS, minHeight: "100%", fontFamily: FONT }} className="w-full flex flex-col md:flex-row">
+      {/* Control rail */}
+      <div style={{ background: RAIL, borderRight: `1px solid ${RAIL_LINE}` }} className="w-full md:w-[300px] md:min-h-screen shrink-0 p-6">
+        <div className="flex items-center gap-2 mb-8">
+          <div style={{ background: RAIL_ACCENT, borderRadius: 4 }} className="w-6 h-6 flex items-center justify-center">
+            <span style={{ fontFamily: MONO, fontSize: 12, fontWeight: 700, color: "#0B1220" }}>C</span>
+          </div>
+          <div>
+            <p style={{ color: RAIL_TEXT, fontFamily: FONT }} className="text-sm font-semibold leading-none">Churn Console</p>
+            <p style={{ color: RAIL_MUTED, fontFamily: FONT }} className="text-[10px] uppercase tracking-wide mt-0.5">Portfolio demo</p>
+          </div>
         </div>
 
-        <div className="grid md:grid-cols-5 gap-6">
-          {/* Controls */}
-          <div style={{ background: PANEL, border: `1px solid ${LINE}` }} className="md:col-span-3 p-5">
-            <h2 style={{ fontFamily: "ui-sans-serif, system-ui", color: INK_SOFT }} className="text-xs uppercase tracking-wide mb-4">
-              Customer profile
-            </h2>
-            <div className="space-y-5">
-              <Field label={`Tenure — ${customer.tenure} months`} help="How long they've been a customer">
-                <input type="range" min={0} max={72} step={1} value={customer.tenure}
-                  onChange={(e) => update("tenure", Number(e.target.value))}
-                  style={{ accentColor: ACCENT, width: "100%" }} />
-              </Field>
+        <RailField label={`Tenure — ${customer.tenure} mo`} help="Months as a customer">
+          <input type="range" min={0} max={72} step={1} value={customer.tenure}
+            onChange={(e) => update("tenure", Number(e.target.value))}
+            style={{ accentColor: RAIL_ACCENT, width: "100%" }} />
+        </RailField>
 
-              <Field label={`Monthly charges — $${customer.MonthlyCharges.toFixed(2)}`}>
-                <input type="range" min={18} max={120} step={0.5} value={customer.MonthlyCharges}
-                  onChange={(e) => update("MonthlyCharges", Number(e.target.value))}
-                  style={{ accentColor: ACCENT, width: "100%" }} />
-              </Field>
+        <RailField label={`Monthly charges — $${customer.MonthlyCharges.toFixed(2)}`}>
+          <input type="range" min={18} max={120} step={0.5} value={customer.MonthlyCharges}
+            onChange={(e) => update("MonthlyCharges", Number(e.target.value))}
+            style={{ accentColor: RAIL_ACCENT, width: "100%" }} />
+        </RailField>
 
-              <Field label={`Total charges to date — $${customer.TotalCharges.toFixed(0)}`}>
-                <input type="range" min={0} max={8500} step={25} value={customer.TotalCharges}
-                  onChange={(e) => update("TotalCharges", Number(e.target.value))}
-                  style={{ accentColor: ACCENT, width: "100%" }} />
-              </Field>
+        <RailField label={`Total charges — $${customer.TotalCharges.toFixed(0)}`}>
+          <input type="range" min={0} max={8500} step={25} value={customer.TotalCharges}
+            onChange={(e) => update("TotalCharges", Number(e.target.value))}
+            style={{ accentColor: RAIL_ACCENT, width: "100%" }} />
+        </RailField>
 
-              <div className="grid grid-cols-2 gap-4">
-                <Field label="Contract type">
-                  <select style={selectStyle} value={customer.Contract} onChange={(e) => update("Contract", e.target.value)}>
-                    {CONTRACT_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
-                  </select>
-                </Field>
-                <Field label="Internet service">
-                  <select style={selectStyle} value={customer.InternetService} onChange={(e) => update("InternetService", e.target.value)}>
-                    {INTERNET_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
-                  </select>
-                </Field>
-              </div>
+        <RailField label="Contract type">
+          <select style={selectStyle} value={customer.Contract} onChange={(e) => update("Contract", e.target.value)}>
+            {CONTRACT_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
+          </select>
+        </RailField>
 
-              <Field label="Payment method">
-                <select style={selectStyle} value={customer.PaymentMethod} onChange={(e) => update("PaymentMethod", e.target.value)}>
-                  {PAYMENT_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
-                </select>
-              </Field>
+        <RailField label="Internet service">
+          <select style={selectStyle} value={customer.InternetService} onChange={(e) => update("InternetService", e.target.value)}>
+            {INTERNET_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
+          </select>
+        </RailField>
 
-              <div className="flex gap-6 pt-1" style={{ fontFamily: "ui-sans-serif, system-ui" }}>
-                <label className="text-sm flex items-center gap-2">
-                  <input type="checkbox" checked={customer.PaperlessBilling} onChange={(e) => update("PaperlessBilling", e.target.checked)} />
-                  Paperless billing
-                </label>
-                <label className="text-sm flex items-center gap-2">
-                  <input type="checkbox" checked={customer.SeniorCitizen} onChange={(e) => update("SeniorCitizen", e.target.checked)} />
-                  Senior citizen
-                </label>
-              </div>
-            </div>
-          </div>
+        <RailField label="Payment method">
+          <select style={selectStyle} value={customer.PaymentMethod} onChange={(e) => update("PaymentMethod", e.target.value)}>
+            {PAYMENT_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
+          </select>
+        </RailField>
 
-          {/* Result */}
-          <div className="md:col-span-2 flex flex-col gap-4">
-            <div style={{ background: PANEL, border: `1px solid ${LINE}` }} className="p-5">
-              <h2 style={{ fontFamily: "ui-sans-serif, system-ui", color: INK_SOFT }} className="text-xs uppercase tracking-wide mb-3">
-                Model output
-              </h2>
-              <div className="flex items-end justify-between mb-2">
-                <span style={{ fontFamily: "ui-monospace, monospace", fontSize: "2.25rem", color: band.color, lineHeight: 1 }}>
-                  {(pChurn * 100).toFixed(1)}%
-                </span>
-                <span style={{ fontFamily: "ui-sans-serif, system-ui", color: band.color }} className="text-sm mb-1">
-                  {band.label} churn risk
-                </span>
-              </div>
-              <div style={{ background: LINE, height: 6, borderRadius: 3, overflow: "hidden" }}>
-                <div style={{ width: `${pChurn * 100}%`, background: band.color, height: "100%" }} />
-              </div>
-              <p style={{ color: INK_SOFT, fontFamily: "ui-sans-serif, system-ui" }} className="text-xs mt-2">
-                predicted probability this customer churns
-              </p>
-            </div>
+        <div className="flex flex-col gap-2 mt-2">
+          <label className="text-xs flex items-center gap-2" style={{ color: RAIL_TEXT, fontFamily: FONT }}>
+            <input type="checkbox" checked={customer.PaperlessBilling} onChange={(e) => update("PaperlessBilling", e.target.checked)} />
+            Paperless billing
+          </label>
+          <label className="text-xs flex items-center gap-2" style={{ color: RAIL_TEXT, fontFamily: FONT }}>
+            <input type="checkbox" checked={customer.SeniorCitizen} onChange={(e) => update("SeniorCitizen", e.target.checked)} />
+            Senior citizen
+          </label>
+        </div>
+      </div>
 
-            <div style={{ background: PANEL, border: `1px solid ${LINE}` }} className="p-5 flex-1">
-              <h2 style={{ fontFamily: "ui-sans-serif, system-ui", color: INK_SOFT }} className="text-xs uppercase tracking-wide mb-3">
-                Plain-language explanation
-              </h2>
-              <button
-                onClick={handleExplain}
-                style={{ background: ACCENT, color: "#fff", fontFamily: "ui-sans-serif, system-ui" }}
-                className="text-sm px-4 py-2 mb-3 w-full transition-colors"
+      {/* Workspace */}
+      <div className="flex-1 p-6 md:p-10">
+        <div className="max-w-3xl mx-auto">
+          <header className="mb-6">
+            <h1 style={{ color: INK, fontFamily: FONT }} className="text-2xl font-bold tracking-tight mb-1.5">
+              Customer risk overview
+            </h1>
+            <p style={{ color: INK_SOFT, fontFamily: FONT }} className="text-sm max-w-lg leading-relaxed">
+              Logistic regression trained on the IBM/Kaggle Telco Customer Churn dataset. Adjust
+              the console on the left; the readout below updates instantly.
+            </p>
+          </header>
+
+          <div className="grid md:grid-cols-5 gap-5">
+            {/* Gauge card */}
+            <div style={{ background: PANEL, border: `1px solid ${BORDER}`, borderRadius: 12 }} className="md:col-span-2 p-6 flex flex-col items-center justify-center text-center">
+              <Gauge pChurn={pChurn} color={band.color} />
+              <span
+                style={{ color: band.color, background: `${band.color}18`, fontFamily: FONT }}
+                className="text-xs font-semibold px-3 py-1 mt-3 rounded-full"
               >
-                Explain this result
-              </button>
-              {explanation && (
-                <p style={{ fontFamily: "ui-sans-serif, system-ui", color: INK, lineHeight: 1.6 }} className="text-sm whitespace-pre-wrap">
-                  {explanation}
-                </p>
-              )}
-              {!explanation && (
-                <p style={{ fontFamily: "ui-sans-serif, system-ui", color: INK_SOFT }} className="text-sm">
-                  Adjust the profile, then click above to have the model's reasoning translated
-                  into plain language.
-                </p>
-              )}
+                {band.label} risk
+              </span>
+            </div>
+
+            {/* KPI grid + explanation */}
+            <div className="md:col-span-3 flex flex-col gap-4">
+              <div className="grid grid-cols-2 gap-3">
+                <KpiTile label="Model accuracy" value={`${(MODEL.metrics.accuracy * 100).toFixed(1)}%`} />
+                <KpiTile label="Recall on churn" value={`${(MODEL.metrics.recallChurn * 100).toFixed(1)}%`} sub="priority metric" />
+                <KpiTile label="Precision on churn" value={`${(MODEL.metrics.precisionChurn * 100).toFixed(1)}%`} />
+                <KpiTile label="Test set size" value={MODEL.metrics.testSetSize} sub="customers" />
+              </div>
+
+              <div style={{ background: PANEL, border: `1px solid ${BORDER}`, borderRadius: 12 }} className="p-5 flex-1">
+                <div className="flex items-center justify-between mb-3">
+                  <p style={{ color: INK, fontFamily: FONT }} className="text-sm font-semibold">Why this score?</p>
+                  <button
+                    onClick={handleExplain}
+                    style={{ background: INK, color: "#fff", fontFamily: FONT, borderRadius: 6 }}
+                    className="text-xs font-medium px-3 py-1.5 hover:opacity-85 transition-opacity"
+                  >
+                    Explain
+                  </button>
+                </div>
+                {explanation ? (
+                  <p style={{ fontFamily: FONT, color: INK, lineHeight: 1.6 }} className="text-sm whitespace-pre-wrap">
+                    {explanation}
+                  </p>
+                ) : (
+                  <p style={{ fontFamily: FONT, color: INK_SOFT }} className="text-sm">
+                    Click "Explain" for a plain-language breakdown generated straight from the
+                    model's own coefficients — no external API call.
+                  </p>
+                )}
+              </div>
             </div>
           </div>
-        </div>
 
-        <footer style={{ borderTop: `1px solid ${LINE}`, fontFamily: "ui-sans-serif, system-ui", color: INK_SOFT }} className="mt-8 pt-4 text-xs flex flex-wrap gap-x-6 gap-y-1">
-          <span>Accuracy: {(MODEL.metrics.accuracy * 100).toFixed(1)}%</span>
-          <span>Recall (churn): {(MODEL.metrics.recallChurn * 100).toFixed(1)}%</span>
-          <span>Precision (churn): {(MODEL.metrics.precisionChurn * 100).toFixed(1)}%</span>
-          <span>Test set: {MODEL.metrics.testSetSize} customers</span>
-        </footer>
+          <div style={{ background: "#EFF6FF", border: `1px solid ${BORDER}`, borderRadius: 10 }} className="text-xs px-4 py-3 mt-5" >
+            <span style={{ fontFamily: FONT, color: INK_SOFT }}>
+              Portfolio demo on a public research dataset — the same interpretable-model pattern
+              applies to any subscription business: SaaS, telecom, fintech, streaming.
+            </span>
+          </div>
+        </div>
       </div>
     </div>
   );
